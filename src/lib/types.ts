@@ -80,3 +80,46 @@ export interface PaperTrade {
 export type Timeframe = '15m' | '1h' | '4h' | '1d';
 
 export type SMCLevel = OrderBlock | FairValueGap | LiquidityZone;
+
+// SMC Detection raw output (before conversion to chart format)
+export interface SMCDetectionResult {
+  orderBlocks: {
+    bullish: OHLCV[];
+    bearish: OHLCV[];
+  };
+  fvgs: {
+    time: number;
+    high: number;
+    low: number;
+    type: 'bullish' | 'bearish';
+  }[];
+  swingPoints: {
+    time: number;
+    price: number;
+    type: 'high' | 'low';
+    strength: number;
+  }[];
+  bosSignals: {
+    type: 'BOS' | 'CHoCH';
+    direction: 'bullish' | 'bearish';
+    time: number;
+    price: number;
+    brokenLevel: number;
+  }[];
+}
+
+// AI Suggestion with levels
+export interface AISuggestion {
+  direction: 'long' | 'short' | 'neutral';
+  entry: number | null;
+  takeProfit: number | null;
+  stopLoss: number | null;
+  confidence: 'high' | 'medium' | 'low';
+  reasoning: string;
+  smcConcepts: string[];
+  keyLevels: {
+    type: 'ob' | 'fvg' | 'liquidity' | 'bos';
+    price: number;
+    label: string;
+  }[];
+}

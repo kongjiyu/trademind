@@ -213,3 +213,5 @@ export function detectSMCLevels(data: OHLCV[]) {
     bosSignals,
   };
 }
+
+export type SMCDetectionResult = ReturnType<typeof detectSMCLevels>;

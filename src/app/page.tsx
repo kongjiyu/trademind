@@ -140,7 +140,7 @@ export default function Home() {
           {/* Chart Section */}
           <div className="lg:col-span-2">
             <div className="bg-gray-900 rounded-lg overflow-hidden" style={{ height: '500px' }}>
-              <Chart pair={pair} timeframe={timeframe} />
+              <Chart />
             </div>
 
             {/* SMC Legend */}

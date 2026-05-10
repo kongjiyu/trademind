@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { OHLCV, OrderBlock, FairValueGap, LiquidityZone, Signal, Timeframe, PaperTrade, TradingPair } from './types';
+import type { OHLCV, OrderBlock, FairValueGap, LiquidityZone, Signal, Timeframe, PaperTrade, AISuggestion } from './types';
 
 interface ChartState {
   // Current data
@@ -14,12 +14,20 @@ interface ChartState {
   liquidityZones: LiquidityZone[];
   signals: Signal[];
 
+  // AI Suggestion
+  aiSuggestion: AISuggestion | null;
+
   // UI state
   selectedLevels: string[];
 
   // Paper trading
   paperTrades: PaperTrade[];
   openTrade: PaperTrade | null;
+
+  // User's drawn levels (from chart clicks)
+  userEntry: number | null;
+  userTP: number | null;
+  userSL: number | null;
 
   // Actions
   setPair: (pair: string) => void;
@@ -28,10 +36,12 @@ interface ChartState {
   setLoading: (loading: boolean) => void;
   setSMCLevels: (orderBlocks: OrderBlock[], fvgs: FairValueGap[], liquidityZones: LiquidityZone[]) => void;
   setSignals: (signals: Signal[]) => void;
+  setAISuggestion: (suggestion: AISuggestion | null) => void;
   toggleLevelSelection: (id: string) => void;
   addPaperTrade: (trade: PaperTrade) => void;
   closeTrade: (id: string, pnl: number) => void;
   resetOpenTrade: () => void;
+  setUserLevels: (entry: number | null, tp: number | null, sl: number | null) => void;
 }
 
 export const useChartStore = create<ChartState>((set) => ({
@@ -43,9 +53,13 @@ export const useChartStore = create<ChartState>((set) => ({
   fairValueGaps: [],
   liquidityZones: [],
   signals: [],
+  aiSuggestion: null,
   selectedLevels: [],
   paperTrades: [],
   openTrade: null,
+  userEntry: null,
+  userTP: null,
+  userSL: null,
 
   setPair: (pair) => set({ pair }),
   setTimeframe: (timeframe) => set({ timeframe }),
@@ -54,6 +68,7 @@ export const useChartStore = create<ChartState>((set) => ({
   setSMCLevels: (orderBlocks, fairValueGaps, liquidityZones) =>
     set({ orderBlocks, fairValueGaps, liquidityZones }),
   setSignals: (signals) => set({ signals }),
+  setAISuggestion: (aiSuggestion) => set({ aiSuggestion }),
   toggleLevelSelection: (id) =>
     set((state) => ({
       selectedLevels: state.selectedLevels.includes(id)
@@ -73,6 +88,7 @@ export const useChartStore = create<ChartState>((set) => ({
       openTrade: null,
     })),
   resetOpenTrade: () => set({ openTrade: null }),
+  setUserLevels: (entry, tp, sl) => set({ userEntry: entry, userTP: tp, userSL: sl }),
 }));
 
 // Telegram settings store
@@ -98,15 +114,19 @@ export const useTelegramStore = create<TelegramState>((set) => ({
 interface AIState {
   messages: { role: 'user' | 'assistant'; content: string }[];
   isThinking: boolean;
+  feedback: string;
   addMessage: (msg: { role: 'user' | 'assistant'; content: string }) => void;
   clearMessages: () => void;
   setThinking: (thinking: boolean) => void;
+  setFeedback: (feedback: string) => void;
 }
 
 export const useAIStore = create<AIState>((set) => ({
   messages: [],
   isThinking: false,
+  feedback: '',
   addMessage: (msg) => set((state) => ({ messages: [...state.messages, msg] })),
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], feedback: '' }),
   setThinking: (isThinking) => set({ isThinking }),
+  setFeedback: (feedback) => set({ feedback }),
 }));
