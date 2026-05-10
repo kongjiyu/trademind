@@ -1,9 +1,7 @@
 // MiniMax API client for AI trading suggestions
 
-interface MiniMaxMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
+const MINIMAX_API_URL = 'https://api.minimax.chat/v1/chat/completions';
+const MODEL = 'MiniMax-M2.7';
 
 interface AIResponse {
   suggestion: string;
@@ -12,6 +10,10 @@ interface AIResponse {
   stopLoss: number | null;
   reasoning: string;
   smcConcepts: string[];
+}
+
+function getApiKey(): string | null {
+  return process.env.MINIMAX_API_KEY || process.env.NEXT_PUBLIC_MINIMAX_API_KEY || null;
 }
 
 export async function getAISuggestion(
@@ -24,7 +26,7 @@ export async function getAISuggestion(
     bosSignals: any[];
   }
 ): Promise<AIResponse> {
-  const apiKey = process.env.MINIMAX_API_KEY || process.env.NEXT_PUBLIC_MINIMAX_API_KEY;
+  const apiKey = getApiKey();
 
   if (!apiKey) {
     return {
@@ -40,36 +42,50 @@ export async function getAISuggestion(
   const prompt = buildSMCAnalysisPrompt(pair, currentPrice, smcLevels);
 
   try {
-    const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+    const response = await fetch(MINIMAX_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'MiniMax-Text-01',
+        model: MODEL,
+        max_completion_tokens: 2048,
+        temperature: 0.7,
+        top_p: 0.95,
         messages: [
           {
             role: 'system',
-            content: `You are a crypto trading analyst specializing in Smart Money Concept (SMC).
+            content: [
+              {
+                type: 'text',
+                text: `You are a crypto trading analyst specializing in Smart Money Concept (SMC).
 You analyze price action, identify institutional trading zones, and provide clear trading recommendations.
 Always explain your reasoning using SMC terminology.`,
+                cache_control: { type: 'ephemeral' },
+              },
+            ],
           },
           {
             role: 'user',
-            content: prompt,
+            content: [
+              {
+                type: 'text',
+                text: prompt,
+              },
+            ],
           },
         ],
-        temperature: 0.7,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`MiniMax API error: ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`MiniMax API error: ${response.status} - ${JSON.stringify(errorData)}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = extractTextContent(data.choices?.[0]?.message?.content);
 
     return parseAIResponse(content);
   } catch (error) {
@@ -79,7 +95,7 @@ Always explain your reasoning using SMC terminology.`,
       entry: null,
       takeProfit: null,
       stopLoss: null,
-      reasoning: 'Failed to get AI response. Please try again.',
+      reasoning: error instanceof Error ? error.message : 'Failed to get AI response. Please try again.',
       smcConcepts: [],
     };
   }
@@ -91,7 +107,7 @@ export async function getUserPlanFeedback(
   pair: string,
   currentPrice: number
 ): Promise<string> {
-  const apiKey = process.env.MINIMAX_API_KEY || process.env.NEXT_PUBLIC_MINIMAX_API_KEY;
+  const apiKey = getApiKey();
 
   if (!apiKey) {
     return 'Demo mode - MiniMax API key not configured. Set MINIMAX_API_KEY to enable AI feedback.';
@@ -119,32 +135,48 @@ Compare the user's plan against SMC best practices. Identify:
 Provide concise, actionable feedback.`;
 
   try {
-    const response = await fetch('https://api.minimax.chat/v1/chat/completions', {
+    const response = await fetch(MINIMAX_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'MiniMax-Text-01',
+        model: MODEL,
+        max_completion_tokens: 1024,
+        temperature: 0.5,
+        top_p: 0.95,
         messages: [
           {
             role: 'system',
-            content: 'You are a trading coach providing feedback on user trading plans. Be direct and educational.',
+            content: [
+              {
+                type: 'text',
+                text: 'You are a trading coach providing feedback on user trading plans. Be direct and educational.',
+                cache_control: { type: 'ephemeral' },
+              },
+            ],
           },
           {
             role: 'user',
-            content: prompt,
+            content: [
+              {
+                type: 'text',
+                text: prompt,
+              },
+            ],
           },
         ],
-        temperature: 0.5,
       }),
     });
 
-    if (!response.ok) throw new Error('API error');
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`API error: ${response.status} - ${JSON.stringify(errorData)}`);
+    }
 
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No feedback available.';
+    return extractTextContent(data.choices?.[0]?.message?.content) || 'No feedback available.';
   } catch (error) {
     console.error('AI feedback error:', error);
     return 'Failed to get AI feedback. Please try again.';
@@ -177,6 +209,21 @@ Based on this SMC analysis, provide:
 Keep response concise and actionable.`;
 }
 
+function extractTextContent(content: any): string {
+  if (!content) return '';
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.map((block: any) => {
+      if (typeof block === 'string') return block;
+      if (block.type === 'text') return block.text || '';
+      if (block.text) return block.text;
+      return '';
+    }).join('');
+  }
+  if (content.text) return content.text;
+  return String(content);
+}
+
 function parseAIResponse(content: string): AIResponse {
   // Try to extract numbers from the response
   const entryMatch = content.match(/entry[:\s]*\$?([0-9,]+(?:\.[0-9]+)?)/i);
@@ -192,7 +239,7 @@ function parseAIResponse(content: string): AIResponse {
   const conceptPatterns = /order\s*block|FVG|fair\s*value\s*gap|liquidity|swing|BOS|CHoCH|ob|buy-side|liquidity\s*grab/i;
   const matches = content.match(conceptPatterns);
   if (matches) {
-    smcConcepts.push(...new Set(matches.map(m => m.toLowerCase())));
+    smcConcepts.push(...new Set(matches.map((m: string) => m.toLowerCase())));
   }
 
   return {
